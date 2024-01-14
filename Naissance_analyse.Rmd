@@ -1,0 +1,245 @@
+---
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+
+## PRE-TRAITEMENT
+
+```{r}
+# importation des libraries
+
+library("FactoMineR")
+library("factoextra")
+library("missMDA")
+library("corrplot")
+library("FactoInvestigate")
+library("tidyverse")
+library("mice")
+library("ExPosition")
+```
+
+Importation du jeu de données
+
+```{r}
+# Chargement du dataset
+birth_data <- read.csv("births14.csv", header = TRUE, sep = ",")
+```
+
+Verification des valeures manquantes
+
+```{r}
+# Vérification des valeurs manquantes pour chaque variable
+sapply(birth_data, function(x) sum(is.na(x)))
+```
+
+Remplacement des valeurs manquantes par la moyenne de chaque variable quantitative
+
+```{r}
+birth_data.analyse<-birth_data[, colnames(birth_data) %in% c("fage", "mage", "weeks", "visits", "gained", "weight")]
+```
+
+Verification
+
+```{r}
+nb <-estim_ncpPCA(birth_data.analyse,ncp.max=5) #estimation du nb de dimensions que l'ACP itérative a besoin pour estimer les vm
+nb$ncp
+birth_data.analyse.complete<-imputePCA(birth_data.analyse,ncp=nb$ncp)
+
+sapply(birth_data.analyse.complete, function(x) sum(is.na(x)))
+
+```
+
+## Analyse des facteurs qui inflence le poids d'un nouveau née
+
+La fonction cor() renvoie une matrice de corrélation indiquant la corrélation entre chaque paire de variables. Vous pouvez interpréter les valeurs de corrélation comme suit :
+
+Si la valeur est proche de 1 ou -1, cela indique une forte corrélation positive ou négative entre les variables.
+
+Si la valeur est proche de 0, cela indique une faible corrélation entre les variables
+
+```{r}
+# Analyse de la relation entre les variables
+cor(birth_data.analyse.complete$completeObs, use = "pairwise.complete.obs")
+```
+
+La corrélation est une mesure statistique qui indique dans quelle mesure deux variables sont liées. Les valeurs de corrélation vont de -1 à 1, où -1 représente une corrélation négative parfaite, 0 représente aucune corrélation et 1 représente une corrélation positive parfaite. Dans cette matrice de corrélation, on peut observer les points suivants :
+
+La corrélation entre l'âge du père et l'âge de la mère est de 0,6374, ce qui indique une corrélation positive forte. Cela signifie que plus l'âge du père est élevé, plus l'âge de la mère est susceptible d'être élevé également.
+
+La corrélation entre le poids de la mère pendant la grossesse et la durée de la grossesse est de 0,0407, ce qui indique une corrélation positive faible. Cela signifie que plus le poids de la mère pendant la grossesse est élevé, plus la durée de la grossesse est susceptible d'être élevée également, mais la corrélation est très faible.
+
+La corrélation entre le poids du bébé à la naissance et la durée de la grossesse est de 0,5480, ce qui indique une corrélation positive forte. Cela signifie que plus la durée de la grossesse est longue, plus le poids du bébé est susceptible d'être élevé.
+
+En conclusion, cette matrice de corrélation indique qu'il y a une corrélation forte et positive entre l'âge du père et l'âge de la mère, une corrélation faible entre le poids de la mère pendant la grossesse et la durée de la grossesse, et une corrélation forte et positive entre le poids du bébé à la naissance et la durée de la grossesse.
+
+## Une autre approche l'utilisation de l'ACP et du cercle de corrélation
+
+```{r}
+# Calcul des composantes principales
+res.pca <- PCA(birth_data.analyse.complete$completeObs, scale.unit=TRUE,quanti.sup = 6, ncp = 5, graph = FALSE)
+```
+
+Affichage de la contribution
+
+```{r}
+eig.val <- get_eigenvalue(res.pca) 
+eig.val
+fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 70))
+```
+
+Il y a 5 valeurs propres, autant que de variable actives. Nous retenons les 2 premiers axes auxquels nous allons donner une sémantique.
+
+Analyse des résultats des variables
+```{r}
+# Afficher les valeurs propres
+var <- get_pca_var(res.pca) 
+
+coord<-var$coord[,1]
+contrib<-var$contrib[,1]
+cos2<-var$cos2[,1]
+display1<-cbind(coord,contrib,cos2)
+display1
+
+coord<-var$coord[,2]
+contrib<-var$contrib[,2]
+cos2<-var$cos2[,2]
+display2<-cbind(coord,contrib,cos2)
+display2
+```
+
+
+
+## Affichage du cercle de corrélation
+
+```{r}
+# Afficher les graphiques (cercle de corrélation, plan factoriel, etc.)
+fviz_pca_var(res.pca, col.var = "contrib", gradient.cols = c("#00AFBB", "#E7B800", "red"), repel = TRUE)
+```
+
+
+## Interpretation
+
+L'analyse en composantes principales (ACP) et l'analyse de corrélation suggèrent plusieurs conclusions:
+
+Les variables visits (nombre de visites prénatales), gained (le poids de la mère pendant la grossesse) et weeks (nombre de semaines de la grossesse) sont modérément corrélées avec le poids du bébé (weight) à la naissance sur l'axe 1. Par contre, les variables mage (age de la mère) et fage (age du père) sont positivement corrélés entre elles sur l'axe 2.
+
+Le nombre de visites pendant la grossesse (visits) est la variable la plus importante pour la première dimension de l'ACP (Dim.1) avec une contribution positive élevée.
+
+Les résultats de l'ACP et de l'analyse de corrélation suggèrent que le poids du bébé à la naissance est influencé à la fois par les facteurs maternels (le poids de la mère) et ceux de la grossesse (le nombre de visites et le nombre de semaine de la grossesse).
+
+En conclusion
+
+pour améliorer le poids du bébé à la naissance, il peut être utile de se concentrer sur la gestion du poids pendant la grossesse et de surveiller attentivement les facteurs maternels tels que le poids de la mère, les visites prénatales ainsi que le nombre de semaines de la grossesse.
+
+## Analyse des facteur liée à la naissance prématuré d'un bébé
+
+```{r}
+# Sélection des variables d'intérêt
+birth_subset <- birth_data[, c("fage", "mage", "gained", "weeks", "mature", "habit", "marital", "whitemom", "premie","sex", "visits")]
+
+# Conversion de la variable "premie" en variable catégorielle
+birth_subset$premie <- as.factor(birth_subset$premie)
+
+# Réalisation de l'ACM
+birth_mca <- MCA(birth_subset, graph = FALSE)
+
+summary(birth_mca)
+
+```
+
+Choix du nombre d'axes - Eboulis des valeurs propres
+
+```{r}
+s<-dim(birth_subset)[2]-1
+p<-dim(birth_mca$call$Xtot)[2] 
+
+eig.val <- get_eigenvalue(birth_mca) 
+eig.val
+#fviz_eig(birth_mca, addlabels = TRUE, ylim = c(0, 30))
+barplot(birth_mca$eig[,1], main="Les 11 valeurs propres", names.arg=1:nrow(birth_mca$eig)) 
+abline(h=1/s,col=2,lwd=2)
+
+```
+
+```{r}
+birth_mca.benzecri <- epMCA(birth_subset[,0:5], graph = FALSE, correction = "b")
+#la fonction epMCA n'accepte pas de variables supplémentaires mais cela n'a pas d'impact sur le calcul des valeurs propres et leur correction
+fviz_eig (birth_mca.benzecri, ylim=c(0,100))
+```
+
+L'ACP a été réalisée sur deux ensembles de données: les individus (10 premiers) et les catégories (10 premières). Les résultats de l'ACP sont présentés sous forme de tableau, avec les dimensions (Dim), les contributions (ctr) et les cosinus carrés (cos2) pour chaque variable dans chaque dimension.
+
+Les individus sont représentés dans trois dimensions (Dim.1, Dim.2 et Dim.3) avec des contributions différentes pour chaque dimension. Les variables qui ont des contributions élevées pour chaque dimension sont les variables les plus importantes pour cette dimension. Les cosinus carrés indiquent la proportion de la variance totale qui est expliquée par chaque dimension pour chaque variable.
+
+Les catégories sont également représentées dans trois dimensions (Dim.1, Dim.2 et Dim.3) avec des contributions différentes pour chaque dimension. Les résultats comprennent également des tests de signification pour chaque dimension (v.test), qui mesurent la significativité statistique de la dimension. Les variables qui ont des contributions élevées pour chaque dimension sont les variables les plus importantes pour cette dimension. Les cosinus carrés indiquent la proportion de la variance totale qui est expliquée par chaque dimension pour chaque variable.
+
+Les résultats présentent également des mesures d'association (eta2) entre des variables catégorielles. Chaque variable est représentée par trois dimensions (Dim.1, Dim.2, Dim.3), avec un coefficient eta2 pour chaque dimension. Le coefficient eta2 est une mesure de l'effet de chaque variable sur la variation de la réponse étudiée.
+
+Les résultats indiquent que la variable "fage" a un effet important sur la réponse étudiée, avec un coefficient eta2 de 0,671 pour la première dimension. De même, les variables "mage", "mature" et "marital" ont également un effet important avec des coefficients eta2 respectifs de 0,854, 0,710 et 0,288.
+
+En revanche, les variables "whitemom" et "sex" ont des coefficients eta2 très faibles, indiquant qu'elles ont un impact limité sur la variation de la réponse étudiée.
+
+Contribution
+
+```{r}
+# Analyse de la contribution des variables à chaque axe
+#dimdesc(birth_pca, axes = 1:2)
+```
+
+## Interpretation de l'analyse de contribution
+
+Chaque dimension de l'ACP.
+
+Pour la dimension 1, les variables les plus importantes sont l'âge de la mère (mage), le statut de maturité de la mère (mature) et l'âge du père (fage), avec des valeurs de R2 très élevées (supérieures à 0,6) et des p-values très faibles (inférieures à 0,05). Cela indique que ces variables ont une forte influence sur la variation de la première dimension de l'ACP, qui semble être principalement liée à la maturité et l'âge des parents.
+
+La dimension 2 est principalement influencée par la durée de la grossesse en semaines (weeks) et le fait que la naissance ait été classée comme prématurée (premie), avec des valeurs de R2 très élevées et des p-values très faibles. Cela indique que la deuxième dimension de l'ACP est principalement liée au temps de gestation et au fait que la naissance soit prématurée ou non.
+
+Les autres variables ont des contributions relativement faibles pour ces deux dimensions de l'ACP
+
+```{r}
+# Créer un tableau croisé entre les variables premie, lowbirthweight et sex
+tab2 <- xtabs(~premie + lowbirthweight + sex, data = birth_data)
+
+# Afficher le tableau croisé
+tab2
+```
+
+```{r}
+# Créer un tableau croisé entre les variables premie, lowbirthweight et sex
+tab <- xtabs(~premie + mature + sex, data = birth_data)
+
+# Afficher le tableau croisé
+tab
+```
+
+## REPRESENTATION GRAPHIQUE
+
+```{r}
+# Visualisation des résultats
+fviz_mca_ind(birth_mca, col.ind = birth_subset$premie, palette = c("#00AFBB", "#FC4E07"), 
+# Choix des couleurs pour les deux classes
+addEllipses = TRUE, ellipse.level = 0.95)
+```
+
+L'ACM permet d'analyser les relations entre les variables catégorielles et de visualiser les relations entre les individus dans un espace de faible dimension. Dans notre cas, nous avons utilisé l'ACM pour évaluer l'influence de plusieurs variables sur la classification des naissances en terme ou prématuré.
+
+La visualisation produite par le code R montre les individus dans le plan factoriel (composé des deux premières dimensions principales), colorés en fonction de leur classe (terme ou prématuré) et avec des ellipses représentant la dispersion des individus de chaque classe.
+
+L'analyse des résultats de l'ACM peut être effectuée de plusieurs manières, par exemple :
+
+L'observation des individus : Nous pouvons observer la répartition des individus dans le plan factoriel et identifier des groupes d'individus similaires. Nous pouvons remarquer que les individus prématurés (en rouge) semblent être plus dispersés que les individus à terme (en bleu) et qu'il n'y a pas de groupes clairement distingués. Cela pourrait indiquer que la classification à terme ou prématuré dépend de plusieurs facteurs et qu'il n'y a pas un seul groupe de facteurs qui explique la variation.
+
+L'observation des variables : Nous pouvons observer la contribution des variables à la formation des axes principaux. Dans notre cas, nous pouvons remarquer que les variables "weeks" et "mature" sont les variables qui contribuent le plus à la formation du premier axe principal, tandis que les variables "habit", "marital" et "whitemom" contribuent davantage au deuxième axe principal. Cela pourrait indiquer que la durée de la grossesse et le statut de maturité de la mère sont des facteurs importants dans la classification des naissances, tandis que le fait que la mère soit non-fumeuse, mariée ou blanche a une influence moindre.
+
+L'observation des relations entre variables : Nous pouvons observer les relations entre les variables en regardant les corrélations entre les variables et leur position dans le plan factoriel. Par exemple, nous pouvons remarquer que la variable "gained" (poids pris par la mère pendant la grossesse) est positivement corrélée avec le premier axe principal, ce qui signifie qu'un gain de poids plus important pourrait être associé à une durée de grossesse plus longue et à un risque moindre de naissance prématurée.
+
+En résumé, l'ACM nous permet de visualiser les relations complexes entre plusieurs variables catégorielles et d'identifier les facteurs qui influencent la classification des naissances à terme ou prématuré. 
